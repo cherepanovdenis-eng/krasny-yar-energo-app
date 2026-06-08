@@ -2880,6 +2880,7 @@ function calcUptime(){
     svntsem_cost_no_vat: svntsemCost,
     transmission_cost_no_vat: transmissionEnergyCost,
     regional_transmission_cost_no_vat: regionalTransmissionCost,
+    regional_transmission_equivalent_rub_kwh_no_vat: volumeKwh ? regionalTransmissionCost / volumeKwh : 0,
     sales_markup_cost_no_vat: markupCost,
     sales_markup_available: dataLoaded,
     sales_markup_basis: dataLoaded ? "опубликованный почасовой компонент в составе ставки за электрическую энергию" : "fallback по локальному тарифному модулю; компонентная детализация месяца не загружена",
@@ -2887,6 +2888,7 @@ function calcUptime(){
     infrastructure_cost_no_vat: infraCost,
     transmission_tariff_mode: transmissionMode,
     transmission_tariff_label: transmissionMode === "fsk" ? "ФСК / ЕНЭС" : `региональный котел ${voltageLabel(voltage)}`,
+    regional_network_capacity_rate_rub_mw_month_no_vat: regionalNetworkCapacityRate,
     fsk_tier_label: fskTransmission.tierLabel,
     fsk_maintenance_rate_rub_mw_month_no_vat: fskTransmission.maintenanceRubMwMonth,
     fsk_loss_rate_rub_mwh_no_vat: fskTransmission.lossRateRubMwh,
@@ -2940,17 +2942,7 @@ function renderUptime(){
               <div class="field"><label>Мощность потребления, кВт</label><input type="text" inputmode="decimal" value="${esc(App.state.context.connectedKw)}" ${updateInput("context.connectedKw", Number)} data-no-live="true"></div>
               <div class="field"><label>Класс напряжения</label><select ${updateInput("uptime.voltage")}>${volts}</select></div>
             </div>
-            <div class="row2">
-              <div class="field"><label>Тариф передачи</label><select ${updateInput("uptime.transmissionTariffMode")}>
-                <option value="regional" ${s.transmissionTariffMode !== "fsk" ? "selected" : ""}>Региональный котел</option>
-                <option value="fsk" ${s.transmissionTariffMode === "fsk" ? "selected" : ""}>ФСК / ЕНЭС</option>
-              </select></div>
-              <div class="field"><label>Содержание ФСК, руб./МВт·мес</label><input value="${fmtNum(r.fsk_maintenance_rate_rub_mw_month_no_vat, 2)}" disabled></div>
-            </div>
-            ${s.transmissionTariffMode === "fsk" ? `<div class="row2">
-              <div class="field"><label>Потери ФСК, руб./МВт·ч</label><input type="text" inputmode="decimal" value="${esc(s.fskLossRateRubMwh)}" ${updateInput("uptime.fskLossRateRubMwh", Number)} data-no-live="true"></div>
-              <div class="field"><label>Норматив потерь ФСК, %</label><input type="text" inputmode="decimal" value="${esc(s.fskLossNormPct)}" ${updateInput("uptime.fskLossNormPct", Number)} data-no-live="true"></div>
-            </div>` : ""}
+            ${uptimeTransmissionPickerHtml(r, s)}
             <div class="field"><label>Профиль работы</label>
               <div class="segbar">
                 ${modeBtn("full", "100%")}
@@ -2968,6 +2960,42 @@ function renderUptime(){
         </div>
       </div>
     </div>
+  </div>`;
+}
+
+function uptimeTransmissionPickerHtml(r, s){
+  const active = r.transmission_tariff_mode === "fsk" ? "fsk" : "regional";
+  const modeCard = ({ mode, title, eyebrow, rate, detail }) => `<button type="button" class="transmission-card ${active === mode ? "active" : ""}" data-click="set-uptime-transmission-mode" data-value="${mode}">
+    <span>${esc(eyebrow)}</span>
+    <b>${esc(title)}</b>
+    <strong>${rate}</strong>
+    <small>${esc(detail)}</small>
+  </button>`;
+  const regionalDetail = `${voltageLabel(r.voltage_code)} · ${fmtNum(r.regional_transmission_equivalent_rub_kwh_no_vat, 5)} ₽/кВт·ч энергия`;
+  const fskDetail = `${esc(r.fsk_tier_label)} · ${fmtNum(r.fsk_total_equivalent_rub_kwh_no_vat, 5)} ₽/кВт·ч условно`;
+  const fskInputs = active === "fsk" ? `<div class="transmission-inputs">
+    <div class="field"><label>Потери ФСК / ЕНЭС, руб./МВт·ч</label><input type="text" inputmode="decimal" value="${esc(s.fskLossRateRubMwh)}" ${updateInput("uptime.fskLossRateRubMwh", Number)} data-no-live="true"></div>
+    <div class="field"><label>Норматив потерь ФСК / ЕНЭС, %</label><input type="text" inputmode="decimal" value="${esc(s.fskLossNormPct)}" ${updateInput("uptime.fskLossNormPct", Number)} data-no-live="true"></div>
+  </div>` : `<div class="transmission-hint">Магистральный тариф ФСК/ЕНЭС доступен отдельным режимом расчета и не смешивается с региональным котлом.</div>`;
+  return `<div class="transmission-mode-panel">
+    <div class="transmission-mode-head"><b>Тариф передачи для расчета</b><span>${active === "fsk" ? "выбран магистральный тариф" : "выбран региональный котел"}</span></div>
+    <div class="transmission-mode-grid">
+      ${modeCard({
+        mode: "regional",
+        eyebrow: "распределительные сети",
+        title: "Региональный котел",
+        rate: `${fmtNum(r.regional_network_capacity_rate_rub_mw_month_no_vat, 2)} ₽/МВт·мес`,
+        detail: regionalDetail,
+      })}
+      ${modeCard({
+        mode: "fsk",
+        eyebrow: "магистральная передача",
+        title: "ФСК / ЕНЭС",
+        rate: `${fmtNum(r.fsk_maintenance_rate_rub_mw_month_no_vat, 2)} ₽/МВт·мес`,
+        detail: fskDetail,
+      })}
+    </div>
+    ${fskInputs}
   </div>`;
 }
 
@@ -3828,6 +3856,11 @@ function handleAction(action, value){
   }
   if(action === "set-uptime-mode"){
     App.state.uptime.mode = value || "full";
+    saveState();
+    render();
+  }
+  if(action === "set-uptime-transmission-mode"){
+    App.state.uptime.transmissionTariffMode = value === "fsk" ? "fsk" : "regional";
     saveState();
     render();
   }
