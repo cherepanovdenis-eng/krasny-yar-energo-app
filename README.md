@@ -38,6 +38,18 @@ cd /Users/deniscerepanov/claude-workspace/projects/krasny-yar-energo-app
 http://127.0.0.1:8797/krasny-yar-energo-app/
 ```
 
+## GitHub / PR discipline
+
+- Рабочая папка остаётся в `projects/krasny-yar-energo-app`, но синхронизируется отдельным GitHub remote.
+- Изменения вести через feature-ветку и draft PR; прямой push в `main` не использовать для рабочих правок.
+- Перед push запускать:
+
+```bash
+scripts/preflight.sh
+```
+
+- GitHub Actions запускает тот же preflight для `main`, `codex/**` и pull request.
+
 ## Граница Draft 1
 
 - Это первая связанная оболочка, а не финальная production-миграция всех расчетных ядер.
